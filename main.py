@@ -2,7 +2,7 @@ import pygame
 import os
 
 WINDOW_HEIGHT = 800
-WINDOW_WIDTH = 600
+WINDOW_WIDTH = 500
 
 # loading the images
 BIRDS = [pygame.transform.scale2x(pygame.image.load(os.path.join("assets", "bird1.png"))), pygame.transform.scale2x(pygame.image.load(
@@ -39,9 +39,9 @@ class Bird:
             # stop from moving too much
             displacement = 15
         
-        if d < 0:
-            d -= 3
-        self.y += d
+        if displacement < 0:
+            displacement -= 3
+        self.y += displacement
         
         if displacement < 0 or self.y < self.height + 50:
             # tilt the bird upwards
@@ -77,4 +77,31 @@ class Bird:
             self.img_count = self.ANIMATION_TIME * 2
         
         rotate_img = pygame.transform.rotate(self.img, self.tilt)
-        rect - rotate_img.get_rect(center= self.img.get_rect(topLeft = (self.x, self.y)).center)
+        rect = rotate_img.get_rect(center= self.img.get_rect(topleft = (self.x, self.y)).center)
+        win.blit(rotate_img, rect.topleft)
+
+def get_mask(self):
+    return pygame.mask.from_surface(self.img)
+
+
+def draw_window(win, bird):
+    win.blit(BACKGROUND, (0,0))
+    bird.draw(win)
+    pygame.display.update()
+
+def main():
+    bird = Bird(200, 200)
+    win = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    run = True
+    clock = pygame.time.Clock()
+    while run:
+        clock.tick(30)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+        draw_window(win , bird)
+        bird.move()
+    pygame.quit()
+    quit()
+
+main()
