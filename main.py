@@ -1,6 +1,7 @@
 import random
 import pygame
 import os
+import neat
 
 WINDOW_HEIGHT = 800
 WINDOW_WIDTH = 500
@@ -16,7 +17,8 @@ BACKGROUND = pygame.transform.scale2x(
     pygame.image.load(os.path.join("assets", "bg.png")))
 
 pygame.font.init()
-FONT = pygame.font.SysFont('Arial', 50)
+FONT = pygame.font.SysFont('Arial', 30)
+generation = 0
 class Bird:
     bird_images = BIRDS
     MAX_ROTATION = 20
@@ -162,56 +164,112 @@ class Pipe():
 
         return False
 
-def draw_window(win, bird, pipes, base, score):
+def draw_window(win, birds, pipes, base, score, gen, alive):
     win.blit(BACKGROUND, (0,0))
     for pipe in pipes:
         pipe.draw(win)
     text = FONT.render("Score: " + str(score), 1, (255,255,255))
     win.blit(text, (WINDOW_WIDTH - 10 - text.get_width(), 10))
+    gen_text = FONT.render("Gen: " + str(gen), 1, (255,255,255))
+    win.blit(gen_text, (10,10))
+    alive_text = FONT.render("Alive: " + str(alive), 1, (255,255,255))
+    win.blit(alive_text, (10, gen_text.get_height() + 5))
     base.draw(win)
-    bird.draw(win)
+    for bird in birds:
+        bird.draw(win)
     pygame.display.update()
 
-def main():
-    bird = Bird(230, 350)
+def eval_genomes(genomes, config):
+    global generation
+    birds = []
+    networks = []
+    genome_list = []
     base = Base(730)
     pipes = [Pipe(600)]
+
+    for _, genome in genomes:
+        network = neat.nn.FeedForwardNetwork.create(genome, config)
+        networks.append(network)
+        birds.append((Bird(230,350)))
+        genome_list.append(genome)
+        genome.fitness = 0
 
     win = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     run = True
     score = 0
+    generation+=1
     clock = pygame.time.Clock()
     while run:
         clock.tick(30)
+        alive = len(birds)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
+                pygame.quit()
+                quit()
+
         rem  = []
         add_pipe = False
+        pipe_no = 0
+
+        if(len(birds) <= 0):
+            break
+
+        if(len(birds) > 0 and len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width()):
+            pipe_no = 1
+
+        for x, bird in enumerate(birds):
+            bird.move()
+            genome_list[x].fitness += 1
+
+            output = networks[x].activate((bird.y, abs(bird.y - pipes[pipe_no].height), abs(bird.y - pipes[pipe_no].bottom)))
+            if output[0] > 0.5:
+                bird.jump()
 
         for pipe in pipes:
-            if pipe.collide(bird, win):
-                pass
+            for x, bird in enumerate(birds):
+                if pipe.collide(bird, win):
+                    genome_list[x].fitness -= 1
+                    birds.pop(x)
+                    networks.pop(x)
+                    genome_list.pop(x)
+
+                if not pipe.passed and pipe.x < bird.x:
+                    pipe.passed = True
+                    add_pipe = True
+            
             if pipe.x + pipe.PIPE_TOP.get_width() < 0:
                 rem.append(pipe)
-            if not pipe.passed and pipe.x < bird.x:
-                pipe.passed = True
-                add_pipe = True
             pipe.move()
+        
         if add_pipe:
             score += 1
+            for genome in genome_list:
+                genome.fitness += 5
             pipes.append(Pipe(600))
         
         for r in rem:
             pipes.remove(r)
 
-        if bird.y + bird.img.get_height() >= 730:
-            pass
+        for x, bird in enumerate(birds):
+            if bird.y + bird.img.get_height() >= 730 or bird.y < 0:
+                birds.pop(x)
+                networks.pop(x)
+                genome_list.pop(x)
 
+        if score > 50:
+            break
         base.move()
-        draw_window(win , bird, pipes, base, score)
-        # bird.move()
-    pygame.quit()
-    quit()
+        draw_window(win , birds, pipes, base, score, generation, alive)
 
-main()
+if __name__ == "__main__":
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, "neat-config.txt")
+    config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         config_path)
+    population = neat.Population(config)
+    population.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    population.add_reporter(stats)
+    winner = population.run(eval_genomes, 50)
